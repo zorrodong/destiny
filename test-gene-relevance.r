@@ -1,6 +1,9 @@
 library(mygene)
 library(destiny)
 library(dplyr)
+library(biomaRt)
+
+mouse <- useMart('ensembl', 'mmusculus_gene_ensembl')
 
 gene_symbols <- function(ids)
 	queryMany(ids, scopes = 'ensembl.gene', fields = 'symbol', returnall = TRUE)$response$symbol

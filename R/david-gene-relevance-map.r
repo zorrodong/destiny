@@ -20,7 +20,7 @@ library(ggplot2)
 #' Not required if coord and matExpression given.
 #' @param coorddim: (str vector)
 #' Columns (dimensions) of projection space to use.
-#' @paramNProc: (scalar)
+#' @param NProc: (scalar)
 #' Number of threads for parallelisation.
 #' 
 #' @return Either
