@@ -1,6 +1,5 @@
 library(Matrix)
 library(ggplot2)
-library(SingleCellExperiment)
 
 if (!'env_playground' %in% search()) {
 	attach(new.env(), name = 'env_playground')
@@ -53,23 +52,48 @@ plot_gr <- function(dm, gr, n_gene_clusts = 500L, dims = 1:2, k = 30, distance =
 }
 
 
+# Colors ----
+
+import_from('RColorBrewer', 'brewer.pal')
+
+prettier_colors <- c(
+	setNames(brewer.pal(8, 'Dark2')[c(1,4,6,8)], c('turquoise', 'magenta', 'yellow', 'black')),
+	setNames(brewer.pal(9, 'Set1')[-c(4,6)], c('red', 'blue', 'green', 'darkorange', 'brown', 'pink', 'grey'))
+)
+scale_colour_cluster <- function(...) scale_color_manual(values = prettier_colors, ...)
+scale_fill_cluster <- function(...) scale_fill_manual(values = prettier_colors, ...)
+
+ggplot(tibble::enframe(prettier_colors), aes(name, 1, fill = value)) +
+	geom_col() + coord_fixed() + scale_fill_identity() + labs(x = NULL, y = NULL) +
+	theme_void() + theme(axis.text.x = element_text())
+
+
 # Test code ----
 
 
 import_from('destiny', c('DiffusionMap', 'gene_relevance'))
-import_from('plotly', 'ggplotly')
+import_from('plotly', c('ggplotly', 'export'))
+import_from('glue', 'glue')
 
 scial <- readRDS('~/Analysis/destiny-paper/scialdone.rds')
-if (!'dm_scial' %in% ls()) dm_scial <- DiffusionMap(scial)
-if (!'gr_scial' %in% ls()) {
+scial_blood <- subset(scial, rep(TRUE, nrow(scial)), scial$cluster %in% c('darkorange', 'brown'))
+
+do_it <- function(dat, name, distnc) {
+	dm_scial <- DiffusionMap(dat, distance = distnc)
 	gr_scial <- gene_relevance(dm_scial, smooth = FALSE)
-	featureNames(gr_scial) <- SummarizedExperiment::rowData(scial)$Symbol
+	featureNames(gr_scial) <- SummarizedExperiment::rowData(dat)$Symbol
+	gm_scial <- plot_gr(dm_scial, gr_scial)
+	gm_scial_ly <- ggplotly(gm_scial + scale_colour_hue())
+	print(gm_scial_ly)
+	
+	dir.create('mail', showWarnings = FALSE)
+	base <- glue('mail/{name} {distnc}')
+	export(ggplotly(plot(dm_scial, 1:2, col_by = 'cluster') + scale_fill_cluster()), glue('{base}.png'))
+	export(gm_scial_ly, glue('{base} gene relevance v2.png'))
+	writeChar(jsonlite::toJSON(setNames(gm_scial$ids, 1:4), pretty = TRUE), glue('{base} gene relevance v2.json'))
 }
-gm_scial <- plot_gr(dm_scial, gr_scial)
-print(ggplotly(gm_scial + scale_colour_hue()))
 
-print(jsonlite::toJSON(setNames(gm_scial$ids, 1:4), pretty = TRUE))
-
-
-
-
+for (distnc in c('euclidean', 'cosine', 'rankcor')) {
+	do_it(scial,       'normal', distnc)
+	do_it(scial_blood, 'blood',  distnc)
+}
