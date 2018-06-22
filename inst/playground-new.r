@@ -1,5 +1,6 @@
 library(Matrix)
 library(ggplot2)
+library(SingleCellExperiment)
 
 if (!'env_playground' %in% search()) {
 	attach(new.env(), name = 'env_playground')
@@ -46,7 +47,9 @@ plot_gr <- function(dm, gr, n_gene_clusts = 500L, dims = 1:2, k = 30, distance =
 	})
 	
 	plot_data <- data.frame(gr@coords, Cluster = sapply(best_genes[cell_clust_label], paste, collapse = ', '))
-	ggplot(plot_data, aes(DC1, DC2, colour = Cluster)) + geom_point()
+	gg <- ggplot(plot_data, aes(DC1, DC2, colour = Cluster)) + geom_point()
+	gg$ids <- best_genes
+	gg
 }
 
 
@@ -60,7 +63,13 @@ scial <- readRDS('~/Analysis/destiny-paper/scialdone.rds')
 if (!'dm_scial' %in% ls()) dm_scial <- DiffusionMap(scial)
 if (!'gr_scial' %in% ls()) {
 	gr_scial <- gene_relevance(dm_scial, smooth = FALSE)
-	featureNames(gr_scial) <- Biobase::fData(scial)$Symbol
+	featureNames(gr_scial) <- SummarizedExperiment::rowData(scial)$Symbol
 }
 gm_scial <- plot_gr(dm_scial, gr_scial)
 print(ggplotly(gm_scial + scale_colour_hue()))
+
+print(jsonlite::toJSON(setNames(gm_scial$ids, 1:4), pretty = TRUE))
+
+
+
+
