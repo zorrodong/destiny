@@ -48,7 +48,7 @@ plot_gr <- function(dm, gr, n_gene_clusts = 500L, dims = 1:2, k = 30, distance =
 	})
 
 	plot_data <- data.frame(gr@coords, Cluster = sapply(best_genes[cell_clust_label], paste, collapse = ', '))
-	gg <- ggplot(plot_data, aes(DC1, DC2, colour = Cluster)) + geom_point()
+	gg <- ggplot(plot_data, aes(DC1, DC2, colour = Cluster, text = )) + geom_point()
 	gg$ids <- best_genes
 	gg
 }
@@ -77,6 +77,7 @@ import_from('destiny', c('DiffusionMap', 'gene_relevance', 'plot_gene_relevance'
 import_from('plotly', c('ggplotly', 'export'))
 import_from('glue', 'glue')
 import_from('SummarizedExperiment', 'rowData')
+import_from('magrittr', '%>%')
 
 scial <- readRDS('~/Analysis/destiny-paper/scialdone.rds')
 # scial_blood <- subset(scial, rep(TRUE, nrow(scial)), scial$cluster %in% c('yellow', 'brown'))
@@ -111,7 +112,7 @@ scial <- readRDS('~/Analysis/destiny-paper/scialdone.rds')
 if (!'dm_scial' %in% ls()) dm_scial <- DiffusionMap(scial, distance = 'rankcor')
 if (!'gr_scial' %in% ls()) gr_scial <- gene_relevance(dm_scial)
 if (!'gr_scial_unsmooth' %in% ls()) gr_scial_unsmooth <- gene_relevance(dm_scial, smooth = FALSE)
-featureNames(gr_scial) <- rowData(scial)$Symbol
+featureNames(gr_scial) <- featureNames(gr_scial_unsmooth) <- rowData(scial)$Symbol
 gg_scial <- plot(dm_scial, 1:2, col_by = 'cluster') + scale_fill_cluster()
 gm_scial <- plot_gene_relevance(gr_scial) + ggtitle('GR smoothed partials+F1')
 gm_scial_unsmooth <- plot_gene_relevance(gr_scial_unsmooth, genes = 8) + ggtitle('GR smoothed F1')
@@ -122,20 +123,37 @@ print(ggplotly(gm_scial))
 print(ggplotly(gm_scial_unsmooth))
 print(ggplotly(gm_scial_louvain))
 ggsave(
-	'mail/normal rankcor gene relevance v1.png',
+	'mail/normal rankcor gene relevance v1.pdf',
 	(plot(gr_scial, gm_scial$ids) | (gm_scial / gg_scial)) + plot_layout(widths = c(3, 1)),
 	width = 12)
 ggsave(
-	'mail/normal rankcor gene relevance v1 unsmoothed.png',
+	'mail/normal rankcor gene relevance v1 unsmoothed.pdf',
 	(plot(gr_scial, gm_scial_unsmooth$ids) | (gm_scial_unsmooth / gg_scial)) + plot_layout(widths = c(3, 1)),
 	width = 12)
 ggsave(
-	'mail/normal rankcor gene relevance v2 louvain.png',
+	'mail/normal rankcor gene relevance v2 louvain.pdf',
 	(plot(gr_scial, unlist(gm_scial_louvain$ids)) | (gm_scial_louvain / gg_scial)) + plot_layout(widths = c(3, 1)),
 	width = 12)
 
-
+# Just turquoise ----
 
 gr_turquoise <- subset(scial, rep(TRUE, nrow(scial)), scial$cluster %in% 'turquoise') %>% DiffusionMap(distance = 'rankcor') %>% gene_relevance()
 featureNames(gr_turquoise) <- rowData(scial)$Symbol
 (plot(gr_turquoise, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')) / plot_gene_relevance(gr_turquoise))
+
+# differential map ----
+
+mapply(
+	function(genes, name) {
+		dtm <- destiny:::differential_map(gr_scial, genes, 1:2)
+		dtm$scatters %>% dplyr::arrange(Expression) %>% ggplot(aes(DC1, DC2)) +
+			ggforce::geom_voronoi_tile(aes(fill = PartialsNorm)) + geom_point(aes(colour = Expression), shape = 20) +
+			scale_colour_viridis_c() +
+			facet_wrap(~ Gene) + ggtitle(name) +
+			scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0))
+	},
+	genes = list(gm_scial$ids, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')),
+	name = c('Found genes', 'Turquoise cluster genes'),
+	SIMPLIFY = FALSE
+) %>%
+	Reduce(`/`, .)
