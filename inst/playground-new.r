@@ -139,21 +139,21 @@ ggsave(
 
 gr_turquoise <- subset(scial, rep(TRUE, nrow(scial)), scial$cluster %in% 'turquoise') %>% DiffusionMap(distance = 'rankcor') %>% gene_relevance()
 featureNames(gr_turquoise) <- rowData(scial)$Symbol
-(plot(gr_turquoise, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')) / plot_gene_relevance(gr_turquoise))
+print(plot(gr_turquoise, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')) / plot_gene_relevance(gr_turquoise))
 
 # differential map ----
 
-mapply(
-	function(genes, name) {
+list(
+	genes = list(gm_scial$ids, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')),
+  name = c('Found genes', 'Turquoise cluster genes')
+) %>% 
+	purrr::pmap(function(genes, name) {
 		dtm <- destiny:::differential_map(gr_scial, genes, 1:2)
 		dtm$scatters %>% dplyr::arrange(Expression) %>% ggplot(aes(DC1, DC2)) +
-			ggforce::geom_voronoi_tile(aes(fill = PartialsNorm)) + geom_point(aes(colour = Expression), shape = 20) +
-			scale_colour_viridis_c() +
+			geom_voronoi(aes(fill = PartialsNorm)) + geom_point(aes(colour = Expression), shape = 20) +
+			scale_colour_viridis_c() + scale_fill_cube_helix(discrete = FALSE, reverse = TRUE) +
 			facet_wrap(~ Gene) + ggtitle(name) +
 			scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0))
-	},
-	genes = list(gm_scial$ids, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')),
-	name = c('Found genes', 'Turquoise cluster genes'),
-	SIMPLIFY = FALSE
-) %>%
-	Reduce(`/`, .)
+	}) %>%
+	Reduce(`/`, .) %>%
+	print()
