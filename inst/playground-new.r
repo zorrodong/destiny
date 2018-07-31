@@ -162,3 +162,19 @@ list(
 	}) %>%
 	Reduce(`/`, .) %>%
 	print()
+
+
+# umap ----
+
+dists <- scial %>% assay('logcounts') %>% t() %>% destiny::find_knn(15) %>% .$dist_mat
+if (!'tumap' %in% ls()) tumap <- uwot::tumap(dists) %>% `colnames<-`(paste0('umap', 1:2))
+list(tumap, colData(scial)) %>%
+	lapply(as.data.frame) %>%
+	bind_cols() %>%
+	ggplot(aes(umap1, umap2, colour = cluster)) +
+	  geom_point() +
+		scale_colour_cluster()
+
+if (!'gr_tumap' %in% ls()) gr_tumap <- destiny::gene_relevance(tumap, scial %>% assay('logcounts') %>% t() %>% as.matrix())
+featureNames(gr_tumap) <- rowData(scial)$Symbol
+destiny::plot_gene_relevance(gr_tumap) %>% print()
