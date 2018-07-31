@@ -143,17 +143,22 @@ print(plot(gr_turquoise, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')) / plot_gene_re
 
 # differential map ----
 
+import_from('destiny', c('geom_voronoi', 'scale_fill_cube_helix'))
+import_from('ggthemes', c('geom_rangeframe'))
+
 list(
 	genes = list(gm_scial$ids, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')),
   name = c('Found genes', 'Turquoise cluster genes')
-) %>% 
+) %>%
 	purrr::pmap(function(genes, name) {
 		dtm <- destiny:::differential_map(gr_scial, genes, 1:2)
 		dtm$scatters %>% dplyr::arrange(Expression) %>% ggplot(aes(DC1, DC2)) +
-			geom_voronoi(aes(fill = PartialsNorm)) + geom_point(aes(colour = Expression), shape = 20) +
+			geom_voronoi(aes(fill = PartialsNorm)) +
+			geom_point(aes(colour = Expression), shape = 20) +
 			scale_colour_viridis_c() + scale_fill_cube_helix(discrete = FALSE, reverse = TRUE) +
 			facet_wrap(~ Gene) + ggtitle(name) +
-			scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0))
+			scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0)) +
+			theme_minimal() + theme(axis.text.x = element_blank(), axis.text.y = element_blank(), panel.grid = element_blank())
 	}) %>%
 	Reduce(`/`, .) %>%
 	print()
