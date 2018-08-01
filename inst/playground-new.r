@@ -144,37 +144,94 @@ print(plot(gr_turquoise, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')) / plot_gene_re
 # differential map ----
 
 import_from('destiny', c('geom_voronoi', 'scale_fill_cube_helix'))
-import_from('ggthemes', c('geom_rangeframe'))
+import_from('magrittr', '%>%')
+import_from('purrr', c('map', 'pmap', 'imap', 'reduce'))
+import_from('dplyr', c('arrange', 'select'))
+
+plot_differential_maps <- function(genes, name, gr) {
+	g_missing <- setdiff(genes, featureNames(gr))
+	if (length(g_missing) > 0) message('Missing genes: ', paste(g_missing, collapse = ', '))
+	genes <- intersect(genes, featureNames(gr))
+	if (length(genes) == 0) {
+		warning('No genes left')
+		return()
+	}
+	dtm <- destiny:::differential_map(gr, genes, 1:2)
+	dtm$scatters %>% arrange(Expression) %>% ggplot(aes(DC1, DC2)) +
+		geom_voronoi(aes(fill = PartialsNorm)) +
+		geom_point(aes(colour = Expression), shape = 20) +
+		scale_colour_viridis_c() + scale_fill_cube_helix(discrete = FALSE, reverse = TRUE) +
+		facet_wrap(~ Gene) + ggtitle(name) +
+		scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0)) +
+		theme_minimal() + theme(axis.text.x = element_blank(), axis.text.y = element_blank(), panel.grid = element_blank())
+}
+
+plot_all_differential_maps <- function(gr, gene_lists, path) {
+	gm <- plot_gene_relevance(gr)
+	p <- c(setNames(gene_lists, seq_along(gene_lists)), list(determined = head(gm$ids))) %>%
+		imap(plot_differential_maps, gr = gr) %>%
+		reduce(`+`) + plot_layout(ncol = 2L)
+	ggsave(path, p, scale = 2)
+	p
+}
+	
 
 list(
 	genes = list(gm_scial$ids, c('T', 'Mesp1', 'Evx1', 'Id3', 'Wfdc2')),
   name = c('Found genes', 'Turquoise cluster genes')
 ) %>%
-	purrr::pmap(function(genes, name) {
-		dtm <- destiny:::differential_map(gr_scial, genes, 1:2)
-		dtm$scatters %>% dplyr::arrange(Expression) %>% ggplot(aes(DC1, DC2)) +
-			geom_voronoi(aes(fill = PartialsNorm)) +
-			geom_point(aes(colour = Expression), shape = 20) +
-			scale_colour_viridis_c() + scale_fill_cube_helix(discrete = FALSE, reverse = TRUE) +
-			facet_wrap(~ Gene) + ggtitle(name) +
-			scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0)) +
-			theme_minimal() + theme(axis.text.x = element_blank(), axis.text.y = element_blank(), panel.grid = element_blank())
-	}) %>%
+	purrr::pmap(plot_differential_maps) %>%
 	Reduce(`/`, .) %>%
 	print()
+
+gene_lists <-
+	list(pseudospace = 4, pseudotime = 5) %>%
+	purrr::imap(function(fig, name)
+		lapply(1:3, function(n)
+			readxl::read_xlsx(paste0('mail/nature18633-s', fig, '.xlsx'), n, skip = 1) %>%
+			.$gene.name %>%
+			head()
+    )
+	)
+
+subsets_gr <- function(ss) {
+	scial_subset <- scial %>% subset(select = cluster %in% ss)
+	gr <- scial_subset %>% DiffusionMap(distance = 'rankcor') %>% gene_relevance()
+	featureNames(gr) <- rowData(scial_subset)$Symbol
+	gr
+}
+
+
+# pseudospace = 4, blue, mesodermal progenitor
+# pseudotime = 7/8, yellow/brown, blod development
+
+plot_all_differential_maps(gr_scial, gene_lists$pseudospace, 'mail/meso-pseudospace.pdf') %>% print()
+plot_all_differential_maps(gr_scial, gene_lists$pseudotime,  'mail/blood-pseudotime.pdf') %>% print()
+
+gr_scial_meso  <- subsets_gr(c('blue'))
+gr_scial_blood <- subsets_gr(c('yellow', 'brown'))
+
+plot_all_differential_maps(gr_scial_meso,  gene_lists$pseudospace, 'mail/meso-pseudospace-only.pdf') %>% print()
+plot_all_differential_maps(gr_scial_blood, gene_lists$pseudotime,  'mail/blood-pseudotime-only.pdf')  %>% print()
 
 
 # umap ----
 
-dists <- scial %>% assay('logcounts') %>% t() %>% destiny::find_knn(15) %>% .$dist_mat
+import_from('destiny', c('find_knn', 'gene_relevance', 'plot_gene_relevance'))
+import_from('dplyr', c('bind_cols'))
+
+dists <- scial %>% assay('logcounts') %>% t() %>% find_knn(15) %>% .$dist_mat
 if (!'tumap' %in% ls()) tumap <- uwot::tumap(dists) %>% `colnames<-`(paste0('umap', 1:2))
-list(tumap, colData(scial)) %>%
+gg_umap <- list(tumap, colData(scial)) %>%
 	lapply(as.data.frame) %>%
 	bind_cols() %>%
 	ggplot(aes(umap1, umap2, colour = cluster)) +
 	  geom_point() +
-		scale_colour_cluster()
+		scale_colour_cluster() + ggtitle('UMAP')
 
-if (!'gr_tumap' %in% ls()) gr_tumap <- destiny::gene_relevance(tumap, scial %>% assay('logcounts') %>% t() %>% as.matrix())
+if (!'gr_tumap' %in% ls()) gr_tumap <- gene_relevance(tumap, scial %>% assay('logcounts') %>% t() %>% as.matrix())
 featureNames(gr_tumap) <- rowData(scial)$Symbol
-destiny::plot_gene_relevance(gr_tumap) %>% print()
+gm_umap <- plot_gene_relevance(gr_tumap)
+
+print(gg_umap / gm_umap)
+ggsave('mail/umap.pdf', gg_umap / gm_umap, height = 10)
